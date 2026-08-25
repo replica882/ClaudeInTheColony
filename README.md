@@ -7,24 +7,34 @@
 > 搜遍 GitHub，ONI 没有任何 http / websocket / remote-control 类的 mod。
 > Minecraft 那边已经有好几个 MCP mod 了，缺氧这边是空的。这是第一个。
 
-## 现在能做什么（v0.1）
+## 现在能做什么（v0.2）
 
-进游戏时、以及之后每 ~5 秒，往
-`~/Library/Application Support/unity.Klei.Oxygen Not Included/claude/state.json`
-写一份殖民地快照：
+mod 在游戏进程里开一个只听 `127.0.0.1:7373` 的 HTTP 服务：
 
-```json
-{
-  "reason": "tick",
-  "wallClock": "2026-08-25 01:30:00",
-  "colony": "笨笨",
-  "cycle": 1,
-  "duplicantCount": 3,
-  "duplicants": ["...", "...", "..."]
-}
+| 端点 | 作用 |
+|---|---|
+| `GET /ping` | 桥还活着吗。不碰游戏世界，主菜单里也能答 |
+| `GET /state` | 殖民地名、周期、地图尺寸、每个复制体的名字/坐标/血量 |
+| `GET /map?x=&y=&w=&h=` | 一块区域每格的元素、温度（℃）、质量（kg）。上限 40×40 |
+
+外面用 `mcp/oni_mcp.py` 包成 MCP 工具：
+
+```bash
+claude mcp add oni -- uv run --script /绝对路径/ClaudeInTheColony/mcp/oni_mcp.py
 ```
 
-单向（游戏 → 外部）。这一版的目的是把「Mac 上能不能编出被游戏加载的 DLL」这条最不确定的链路先跑通。
+（`uv` 会照 PEP 723 的内联声明自己准备依赖，不用建虚拟环境。）
+
+也可以完全不经过 MCP，直接问：
+
+```bash
+curl -s 127.0.0.1:7373/state | python3 -m json.tool
+curl -s "127.0.0.1:7373/map?x=100&y=100&w=20&h=12"
+```
+
+另外每 ~5 秒仍会往
+`~/Library/Application Support/unity.Klei.Oxygen Not Included/claude/state.json`
+落一份快照，作为 HTTP 之外的旁路。
 
 ## 构建
 
@@ -67,10 +77,10 @@ Mac 的差异都在这里：
 ```
 ONI 进程 (Mono)
  └ ClaudeInTheColony.dll  (Harmony)
-    ├ 后台线程 HTTP server            ← v0.2
-    └ Game.Update 上的主线程指令队列   ← v0.2
+    ├ 后台线程 HTTP server (127.0.0.1:7373)
+    └ Game.Update 上的主线程指令队列
              ↑ HTTP
-      MCP server (Python)             ← v0.2
+      MCP server (Python, mcp/oni_mcp.py)
              ↑
            Claude
 ```
@@ -81,7 +91,7 @@ ONI 进程 (Mono)
 ## 路线图
 
 - [x] **v0.1 打通** — 编译链、加载链、状态落盘
-- [ ] **v0.2 眼睛** — HTTP server + 主线程队列 + MCP 包装；地图查询（每格元素/温度/气压）
+- [x] **v0.2 眼睛** — HTTP server + 主线程队列 + MCP 包装；地图查询（每格元素/温度/气压）
 - [ ] **v0.3 嘴** — 游戏内通知，Claude 可以在右上角说话
 - [ ] **v0.4 手** — 挖掘 / 拆除 / 优先级 / 暂停加速
 - [ ] **v0.5 真·手** — 建造、布线、管道

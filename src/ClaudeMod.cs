@@ -19,6 +19,7 @@ namespace ClaudeInTheColony {
             TryPatch(harmony, typeof(Game), "Update",
                      nameof(Hooks.AfterGameUpdate));
 
+            Bridge.Start();
             Log.Info("patch 阶段结束");
         }
 
@@ -54,7 +55,10 @@ namespace ClaudeInTheColony {
         }
 
         public static void AfterGameUpdate() {
-            // 每 ~300 帧（5 秒左右）看一眼，别把磁盘写爆
+            // 桥上排队的请求必须在主线程执行 —— 这是整个 mod 的心跳
+            Bridge.Pump();
+
+            // 顺带每 ~300 帧（5 秒左右）落一份快照，MCP 没连的时候也能看
             if (++frame < 300) return;
             frame = 0;
             Eyes.Dump("tick");
