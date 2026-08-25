@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
@@ -14,9 +15,10 @@ namespace ClaudeInTheColony {
             switch (job.Path) {
                 case "/state": return State();
                 case "/map":   return Map(job);
+                case "/raw":   return Raw(job);
                 default:
                     job.Status = 404;
-                    return "{\"error\":\"没有这个端点\",\"available\":[\"/ping\",\"/state\",\"/map\"]}";
+                    return "{\"error\":\"没有这个端点\",\"available\":[\"/ping\",\"/state\",\"/map\",\"/raw\"]}";
             }
         }
 
@@ -133,6 +135,88 @@ namespace ClaudeInTheColony {
             Rows(sb, "elements", grid, true);  sb.Append(",\n");
             Rows(sb, "tempC",    temp, false); sb.Append(",\n");
             Rows(sb, "massKg",   mass, false); sb.Append("\n}");
+            return sb.ToString();
+        }
+
+
+        // ───────────────────────── /raw ─────────────────────────
+
+        /// <summary>
+        /// 给渲染器吃的原始格子数据。默认整张地图。
+        ///
+        /// 每格 10 字节，小端：
+        ///   uint16  元素在 legend 里的下标
+        ///   float32 温度（开尔文）
+        ///   float32 质量（kg）
+        /// 整张 256x384 的图约 1 MB，base64 后 1.3 MB —— 本机回环，无所谓。
+        ///
+        /// 刻意不在这里画图：渲染逻辑放外面，改配色不用重启游戏。
+        /// </summary>
+        private static string Raw(Job job) {
+            int x0 = Mathf.Clamp(job.QInt("x", 0), 0, Grid.WidthInCells - 1);
+            int y0 = Mathf.Clamp(job.QInt("y", 0), 0, Grid.HeightInCells - 1);
+            int w  = Mathf.Clamp(job.QInt("w", Grid.WidthInCells),  1, Grid.WidthInCells  - x0);
+            int h  = Mathf.Clamp(job.QInt("h", Grid.HeightInCells), 1, Grid.HeightInCells - y0);
+
+            var names   = new List<string>();
+            var states  = new List<string>();      // 气/液/固 —— 渲染器靠它决定哪张图画哪些格子
+            var indexOf = new Dictionary<string, ushort>();
+
+            var bytes = new byte[w * h * 10];
+            int at = 0;
+
+            // 行序：y 从大到小，跟屏幕上看到的一致
+            for (int row = 0; row < h; row++) {
+                int y = y0 + h - 1 - row;
+                for (int col = 0; col < w; col++) {
+                    int cell = Grid.XYToCell(x0 + col, y);
+
+                    ushort idx = 0;
+                    float tempK = 0f, massKg = 0f;
+
+                    if (Grid.IsValidCell(cell)) {
+                        var element = Grid.Element[cell];
+                        string name = element != null ? element.id.ToString() : "Void";
+                        if (!indexOf.TryGetValue(name, out idx)) {
+                            idx = (ushort)names.Count;
+                            indexOf[name] = idx;
+                            names.Add(name);
+                            states.Add(element == null ? "void"
+                                     : element.IsGas    ? "gas"
+                                     : element.IsLiquid ? "liquid"
+                                     : element.IsSolid  ? "solid" : "other");
+                        }
+                        tempK  = Grid.Temperature[cell];
+                        massKg = Grid.Mass[cell];
+                    } else {
+                        const string OOB = "OutOfBounds";
+                        if (!indexOf.TryGetValue(OOB, out idx)) {
+                            idx = (ushort)names.Count;
+                            indexOf[OOB] = idx;
+                            names.Add(OOB);
+                            states.Add("void");
+                        }
+                    }
+
+                    bytes[at++] = (byte)(idx & 0xFF);
+                    bytes[at++] = (byte)(idx >> 8);
+                    Buffer.BlockCopy(BitConverter.GetBytes(tempK),  0, bytes, at, 4); at += 4;
+                    Buffer.BlockCopy(BitConverter.GetBytes(massKg), 0, bytes, at, 4); at += 4;
+                }
+            }
+
+            var sb = new StringBuilder(bytes.Length * 2);
+            sb.Append("{\n  \"origin\": {\"x\": ").Append(x0).Append(", \"y\": ").Append(y0)
+              .Append(", \"w\": ").Append(w).Append(", \"h\": ").Append(h).Append("},\n");
+            sb.Append("  \"format\": \"每格 10 字节小端：uint16 元素下标 / float32 开尔文 / float32 千克；行序 y 从大到小\",\n");
+            sb.Append("  \"legend\": [");
+            for (int i = 0; i < names.Count; i++) {
+                if (i > 0) sb.Append(", ");
+                sb.Append("{\"name\": ").Append(Json.Str(names[i]))
+                  .Append(", \"state\": ").Append(Json.Str(states[i])).Append("}");
+            }
+            sb.Append("],\n");
+            sb.Append("  \"data\": ").Append(Json.Str(Convert.ToBase64String(bytes))).Append("\n}");
             return sb.ToString();
         }
 
