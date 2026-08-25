@@ -62,7 +62,7 @@ namespace ClaudeInTheColony {
                 }
                 sb.Append("]\n}");
 
-                File.WriteAllText(Path.Combine(Dir, "state.json"), sb.ToString(), Encoding.UTF8);
+                File.WriteAllText(Path.Combine(Dir, "state.json"), sb.ToString(), new UTF8Encoding(false));
             } catch (Exception e) {
                 broken = true;
                 Log.Error("Eyes.Dump 炸了，之后不再尝试：" + e);
