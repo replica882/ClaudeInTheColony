@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <AssemblyName>ClaudeInTheColony</AssemblyName>
+    <RootNamespace>ClaudeInTheColony</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <NoWarn>$(NoWarn);CS0436;NU1701</NoWarn>
+    <MSBuildWarningsAsMessages>MSB3277</MSBuildWarningsAsMessages>
+    <GameManaged>/Users/susu/Library/Application Support/Steam/steamapps/common/OxygenNotIncluded/OxygenNotIncluded.app/Contents/Resources/Data/Managed</GameManaged>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="src/**/*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="Assembly-CSharp"           HintPath="$(GameManaged)/Assembly-CSharp.dll"           Private="false" />
+    <Reference Include="Assembly-CSharp-firstpass" HintPath="$(GameManaged)/Assembly-CSharp-firstpass.dll" Private="false" />
+    <Reference Include="0Harmony"                  HintPath="$(GameManaged)/0Harmony.dll"                  Private="false" />
+    <Reference Include="Newtonsoft.Json"           HintPath="$(GameManaged)/Newtonsoft.Json.dll"           Private="false" />
+    <Reference Include="UnityEngine"               HintPath="$(GameManaged)/UnityEngine.dll"               Private="false" />
+    <Reference Include="UnityEngine.CoreModule"    HintPath="$(GameManaged)/UnityEngine.CoreModule.dll"    Private="false" />
+  </ItemGroup>
+</Project>
