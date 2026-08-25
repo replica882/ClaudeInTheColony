@@ -50,6 +50,18 @@ curl -s "127.0.0.1:7373/map?x=100&y=100&w=20&h=12"
 grep ClaudeInTheColony ~/Library/Logs/Klei/"Oxygen Not Included"/Player.log
 ```
 
+## 如果你开着代理
+
+桥听的是 `127.0.0.1`，但只要设了 `http_proxy` 环境变量（Clash / 各种机场），
+`curl` 和 Python 的 `urllib` **都会把发往本机的请求也交给代理**，代理连不上
+游戏进程，回你一个 502 —— 报错长得跟"游戏没开"一模一样，能查很久。
+
+```bash
+curl -s --noproxy '*' 127.0.0.1:7373/ping     # 手动测试要加 --noproxy
+```
+
+`mcp/oni_mcp.py` 里已经用空的 `ProxyHandler` 强制直连，不受环境变量影响。
+
 ## macOS 上的坑
 
 ONI modding 的社区资料（[Cairath 的指南](https://github.com/Cairath/Oxygen-Not-Included-Modding)、

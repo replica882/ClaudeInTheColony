@@ -27,10 +27,15 @@ TIMEOUT = 8
 
 mcp = FastMCP("oni")
 
+# 必须显式绕开系统代理。开着 Clash 之类的机场时，http_proxy 环境变量会让
+# urllib 把发往 127.0.0.1 的请求也交给代理，代理连不上游戏进程，回 502 ——
+# 报错长得跟"游戏没开"一模一样，能查很久。空的 ProxyHandler 直连。
+_direct = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
 
 def _get(path: str) -> str:
     try:
-        with urllib.request.urlopen(BASE + path, timeout=TIMEOUT) as r:
+        with _direct.open(BASE + path, timeout=TIMEOUT) as r:
             return r.read().decode("utf-8")
     except urllib.error.HTTPError as e:
         body = e.read().decode("utf-8", "replace")
