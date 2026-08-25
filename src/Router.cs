@@ -16,9 +16,10 @@ namespace ClaudeInTheColony {
                 case "/state": return State();
                 case "/map":   return Map(job);
                 case "/raw":   return Raw(job);
+                case "/buildings": return Buildings(job);
                 default:
                     job.Status = 404;
-                    return "{\"error\":\"没有这个端点\",\"available\":[\"/ping\",\"/state\",\"/map\",\"/raw\"]}";
+                    return "{\"error\":\"没有这个端点\",\"available\":[\"/ping\",\"/state\",\"/map\",\"/raw\",\"/buildings\"]}";
             }
         }
 
@@ -217,6 +218,109 @@ namespace ClaudeInTheColony {
             }
             sb.Append("],\n");
             sb.Append("  \"data\": ").Append(Json.Str(Convert.ToBase64String(bytes))).Append("\n}");
+            return sb.ToString();
+        }
+
+
+        // ─────────────────────── /buildings ───────────────────────
+
+        /// <summary>
+        /// 建筑层。格子数据里完全看不见这些 —— 它们是 GameObject，不是 Element。
+        ///
+        /// 默认给按类型的汇总（几百上千个建筑全量吐出来没人看得完），
+        /// 加 ?detail=1 才给逐个列表，可以配合 x/y/w/h 只要一块区域。
+        /// </summary>
+        private static string Buildings(Job job) {
+            bool detail = job.Q("detail") != null;
+            int x0 = job.QInt("x", -1), y0 = job.QInt("y", -1);
+            int w  = job.QInt("w", 0),  h  = job.QInt("h", 0);
+            bool clip = x0 >= 0 && y0 >= 0 && w > 0 && h > 0;
+
+            var counts     = new Dictionary<string, int>();
+            var zhName     = new Dictionary<string, string>();
+            var rows       = new StringBuilder();
+            int shown = 0, total = 0;
+            float powerDemand = 0f, batteryJoules = 0f, batteryCap = 0f;
+
+            var all = Components.BuildingCompletes;
+            if (all != null) {
+                foreach (var bc in all.Items) {
+                    if (bc == null || bc.Def == null) continue;
+                    int cell = Grid.PosToCell(bc.gameObject);
+                    if (!Grid.IsValidCell(cell)) continue;
+                    int bx, by;
+                    Grid.CellToXY(cell, out bx, out by);
+
+                    if (clip && (bx < x0 || bx >= x0 + w || by < y0 || by >= y0 + h)) continue;
+
+                    total++;
+                    string id = bc.Def.PrefabID;
+                    int c; counts.TryGetValue(id, out c); counts[id] = c + 1;
+                    if (!zhName.ContainsKey(id)) zhName[id] = bc.Def.Name;
+
+                    var consumer = bc.GetComponent<EnergyConsumer>();
+                    if (consumer != null) powerDemand += consumer.WattsNeededWhenActive;
+
+                    var battery = bc.GetComponent<Battery>();
+                    if (battery != null) {
+                        batteryJoules += battery.JoulesAvailable;
+                        batteryCap    += battery.Capacity;
+                    }
+
+                    if (!detail || shown >= 400) continue;
+                    if (shown > 0) rows.Append(",\n");
+                    shown++;
+
+                    rows.Append("    {\"id\": ").Append(Json.Str(id))
+                        .Append(", \"name\": ").Append(Json.Str(bc.Def.Name))
+                        .Append(", \"x\": ").Append(bx).Append(", \"y\": ").Append(by)
+                        .Append(", \"w\": ").Append(bc.Def.WidthInCells)
+                        .Append(", \"h\": ").Append(bc.Def.HeightInCells);
+
+                    var rot = bc.GetComponent<Rotatable>();
+                    if (rot != null)
+                        rows.Append(", \"rot\": ").Append(Json.Str(rot.GetOrientation().ToString()));
+
+                    var op = bc.GetComponent<Operational>();
+                    if (op != null)
+                        rows.Append(", \"running\": ").Append(op.IsOperational ? "true" : "false");
+
+                    if (consumer != null)
+                        rows.Append(", \"wattsNeeded\": ").Append(Json.Num(consumer.WattsNeededWhenActive));
+
+                    var pe = bc.GetComponent<PrimaryElement>();
+                    if (pe != null)
+                        rows.Append(", \"tempC\": ").Append(Json.Num(pe.Temperature - 273.15f));
+
+                    rows.Append("}");
+                }
+            }
+
+            var sb = new StringBuilder(4096);
+            sb.Append("{\n  \"total\": ").Append(total).Append(",\n");
+            sb.Append("  \"powerDemandWatts\": ").Append(Json.Num(powerDemand)).Append(",\n");
+            sb.Append("  \"batteryJoules\": ").Append(Json.Num(batteryJoules))
+              .Append(", \"batteryCapacity\": ").Append(Json.Num(batteryCap)).Append(",\n");
+
+            sb.Append("  \"byType\": [");
+            var sorted = new List<KeyValuePair<string, int>>(counts);
+            sorted.Sort(delegate (KeyValuePair<string, int> a, KeyValuePair<string, int> b) {
+                return b.Value.CompareTo(a.Value);
+            });
+            for (int i = 0; i < sorted.Count; i++) {
+                if (i > 0) sb.Append(", ");
+                sb.Append("{\"id\": ").Append(Json.Str(sorted[i].Key))
+                  .Append(", \"name\": ").Append(Json.Str(zhName[sorted[i].Key]))
+                  .Append(", \"n\": ").Append(sorted[i].Value).Append("}");
+            }
+            sb.Append("]");
+
+            if (detail) {
+                sb.Append(",\n  \"shown\": ").Append(shown);
+                if (shown >= 400) sb.Append(",\n  \"truncated\": \"只给了前 400 个，用 x/y/w/h 缩小范围\"");
+                sb.Append(",\n  \"buildings\": [\n").Append(rows).Append("\n  ]");
+            }
+            sb.Append("\n}");
             return sb.ToString();
         }
 
